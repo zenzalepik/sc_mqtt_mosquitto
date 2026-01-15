@@ -5,6 +5,7 @@ import time
 import os
 from dotenv import load_dotenv
 
+print("[sub_gui] Loading .env")
 load_dotenv()
 
 class MQTTSubscriberGUI:
@@ -15,7 +16,7 @@ class MQTTSubscriberGUI:
         
         self.client = None
         self.is_connected = False
-        
+        print("[sub_gui] App initialized")
         self.create_widgets()
 
     def create_widgets(self):
@@ -55,6 +56,7 @@ class MQTTSubscriberGUI:
         self.log_area.pack(fill="both", expand=True, padx=5, pady=5)
 
     def log(self, message):
+        print(f"[sub_gui] {message}")
         self.log_area.insert(tk.END, message + "\n")
         self.log_area.see(tk.END)
 
@@ -69,6 +71,7 @@ class MQTTSubscriberGUI:
 
     def connect_mqtt(self):
         broker = self.broker_var.get()
+        print(f"[sub_gui] toggle_connection -> is_connected={self.is_connected}, broker={broker}, port={self.port_var.get()}")
         try:
             port = int(self.port_var.get())
         except ValueError:
@@ -76,24 +79,30 @@ class MQTTSubscriberGUI:
             return
 
         try:
+            print("[sub_gui] Initializing MQTT client")
             self.client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2)
             self.client.on_connect = self.on_connect
             self.client.on_message = self.on_message
             self.client.on_disconnect = self.on_disconnect
             
+            print(f"[sub_gui] Connecting to {broker}:{port}...")
             self.client.connect(broker, port, 60)
+            print("[sub_gui] Starting network loop")
             self.client.loop_start()
             
             self.btn_connect.config(state="disabled")
         except Exception as e:
+            print(f"[sub_gui] connect_mqtt error: {e}")
             messagebox.showerror("Error", f"Gagal connect: {e}")
 
     def disconnect_mqtt(self):
         if self.client:
+            print("[sub_gui] disconnect_mqtt called")
             self.client.disconnect()
             self.client.loop_stop()
 
     def on_connect(self, client, userdata, flags, reason_code, properties):
+        print(f"[sub_gui] on_connect called, reason_code={reason_code}")
         if reason_code == 0:
             self.is_connected = True
             self.update_status("Connected", "green")
@@ -110,6 +119,7 @@ class MQTTSubscriberGUI:
             self.root.after(0, lambda: self.btn_connect.config(state="normal"))
 
     def on_disconnect(self, client, userdata, flags, reason_code, properties):
+        print(f"[sub_gui] on_disconnect called, reason_code={reason_code}")
         self.is_connected = False
         self.update_status("Disconnected", "red")
         self.log("Terputus dari broker")
