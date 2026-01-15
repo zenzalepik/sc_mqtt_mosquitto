@@ -2,6 +2,10 @@ import tkinter as tk
 from tkinter import ttk, scrolledtext, messagebox
 import paho.mqtt.client as mqtt
 import time
+import os
+from dotenv import load_dotenv
+
+load_dotenv()
 
 class MQTTPublisherGUI:
     def __init__(self, root):
@@ -20,11 +24,11 @@ class MQTTPublisherGUI:
         conn_frame.pack(fill="x", padx=10, pady=5)
 
         ttk.Label(conn_frame, text="Broker:").grid(row=0, column=0, padx=5)
-        self.broker_var = tk.StringVar(value="localhost")
+        self.broker_var = tk.StringVar(value=os.getenv("MQTT_BROKER", "localhost"))
         ttk.Entry(conn_frame, textvariable=self.broker_var).grid(row=0, column=1, padx=5)
 
         ttk.Label(conn_frame, text="Port:").grid(row=0, column=2, padx=5)
-        self.port_var = tk.StringVar(value="1883")
+        self.port_var = tk.StringVar(value=os.getenv("MQTT_PORT", "1883"))
         ttk.Entry(conn_frame, textvariable=self.port_var, width=10).grid(row=0, column=3, padx=5)
 
         self.btn_connect = ttk.Button(conn_frame, text="Connect", command=self.toggle_connection)
@@ -38,7 +42,7 @@ class MQTTPublisherGUI:
         pub_frame.pack(fill="both", expand=True, padx=10, pady=5)
 
         ttk.Label(pub_frame, text="Topic:").grid(row=0, column=0, padx=5, sticky="w")
-        self.pub_topic_var = tk.StringVar(value="tes/mqtt")
+        self.pub_topic_var = tk.StringVar(value=os.getenv("MQTT_TOPIC_PUB", "tes/mqtt"))
         ttk.Entry(pub_frame, textvariable=self.pub_topic_var, width=40).grid(row=0, column=1, padx=5, pady=5, sticky="w")
 
         ttk.Label(pub_frame, text="Pesan:").grid(row=1, column=0, padx=5, sticky="nw")
