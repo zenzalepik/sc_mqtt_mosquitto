@@ -1,11 +1,10 @@
 import tkinter as tk
-from tkinter import ttk, messagebox
+from tkinter import ttk
 import paho.mqtt.client as mqtt
 import os
-import sys
 from dotenv import load_dotenv
 
-# Load environment variables from parent directory if not found in current
+# Load environment variables
 current_dir = os.path.dirname(os.path.abspath(__file__))
 parent_dir = os.path.dirname(current_dir)
 env_path = os.path.join(parent_dir, '.env')
@@ -34,7 +33,8 @@ class SmartLightApp:
 
     def create_widgets(self):
         # Title
-        ttk.Label(self.root, text="Living Room Light", font=("Arial", 16, "bold"), background="#333", foreground="white").pack(pady=20)
+        ttk.Label(self.root, text="Living Room Light", font=("Arial", 16, "bold"),
+                  background="#333", foreground="white").pack(pady=20)
 
         # Light Bulb Indicator (Canvas)
         self.canvas = tk.Canvas(self.root, width=150, height=150, bg="#333", highlightthickness=0)
@@ -43,25 +43,26 @@ class SmartLightApp:
         # Draw Bulb (Circle)
         self.bulb = self.canvas.create_oval(25, 25, 125, 125, fill="#555", outline="white", width=2)
         
-        # Status Label
-        self.status_label = ttk.Label(self.root, text="OFF", font=("Arial", 14), background="#333", foreground="#aaa")
+        # Status Label with Emoji
+        self.status_label = ttk.Label(self.root, text="🔌 OFF", font=("Arial", 14),
+                                      background="#333", foreground="#aaa")
         self.status_label.pack(pady=10)
 
         # Connection Status
-        self.conn_label = ttk.Label(self.root, text="Connecting...", font=("Arial", 9), background="#333", foreground="orange")
+        self.conn_label = ttk.Label(self.root, text="Connecting...", font=("Arial", 9),
+                                    background="#333", foreground="orange")
         self.conn_label.pack(side="bottom", pady=10)
 
     def update_light_visual(self):
         print(f"[smart_light] update_light_visual -> is_on={self.is_on}")
         if self.is_on:
-            self.canvas.itemconfig(self.bulb, fill="#FFD700", outline="#FFD700") # Gold/Yellow
+            self.canvas.itemconfig(self.bulb, fill="#FFD700", outline="#FFD700")  # Gold/Yellow
             self.canvas.itemconfig(self.bulb, width=0)
-            # Add glow effect (simple circles)
-            self.status_label.config(text="ON", foreground="#FFD700")
+            self.status_label.config(text="💡 ON", foreground="#FFD700")
         else:
-            self.canvas.itemconfig(self.bulb, fill="#555", outline="white") # Dark Grey
+            self.canvas.itemconfig(self.bulb, fill="#555", outline="white")  # Dark Grey
             self.canvas.itemconfig(self.bulb, width=2)
-            self.status_label.config(text="OFF", foreground="#aaa")
+            self.status_label.config(text="🔌 OFF", foreground="#aaa")
 
     def toggle_light(self, state):
         print(f"[smart_light] toggle_light called with state={state}")
