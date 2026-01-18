@@ -1,0 +1,28 @@
+# Prompt: Build a complete HA MQTT system plan using HAProxy + Mosquitto + Keepalived
+system_plan:
+  name: "HAProxy + Mosquitto HA MQTT with Keepalived"
+  platforms: ["Linux", "Windows", "Raspberry Pi"]
+  components:
+    - MosquittoBroker:
+        description: "Lightweight MQTT broker instances"
+        size: "1-2 MB per node"
+        features: ["Native MQTT", "QoS PUBACK support", "Persistence option"]
+    - HAProxyOrNGINX:
+        description: "Load balancer with health check"
+        size: "10-20 MB"
+        features: ["Round robin", "Failover", "Health check"]
+    - Keepalived:
+        description: "VRRP-based Virtual IP for transparent failover between HAProxy nodes"
+        size: "~1 MB"
+        features:
+          ["Virtual IP", "Automatic failover", "Health check integration"]
+        notes: "Native on Linux/Raspberry Pi; on Windows use DNS failover or equivalent"
+    - BufferPublisher:
+        description: "SQLite buffer for zero data loss"
+        size: "5-10 MB"
+        features: ["Message persistence until PUBACK", "Cross-platform support"]
+  guarantees:
+    - HighAvailability: true
+    - Failover: transparent via VIP (Linux/Pi), DNS-based on Windows
+    - ZeroDataLoss: true
+  complexity: "Medium"

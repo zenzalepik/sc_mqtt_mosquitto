@@ -16,6 +16,7 @@ class MQTTPublisherGUI:
         
         self.client = None
         self.is_connected = False
+        self.offline_queue = []
         print("[pub_gui] App initialized")
         self.create_widgets()
 
@@ -50,6 +51,13 @@ class MQTTPublisherGUI:
         self.msg_text = tk.Text(pub_frame, height=5, width=40)
         self.msg_text.grid(row=1, column=1, padx=5, pady=5)
         self.msg_text.insert("1.0", "Halo dari Publisher GUI")
+
+        self.keep_send_var = tk.BooleanVar(value=False)
+        ttk.Checkbutton(
+            pub_frame,
+            text="Keep send message when disconnected",
+            variable=self.keep_send_var
+        ).grid(row=2, column=0, padx=5, pady=5, sticky="w")
 
         ttk.Button(pub_frame, text="Publish", command=self.publish_message).grid(row=2, column=1, padx=5, pady=5, sticky="e")
 
@@ -108,6 +116,20 @@ class MQTTPublisherGUI:
             self.is_connected = True
             self.update_status("Connected", "green")
             self.log(f"Terhubung ke {self.broker_var.get()}:{self.port_var.get()}")
+            if self.offline_queue:
+                self.log("Mengirim pesan yang tersimpan saat offline")
+                queue_copy = list(self.offline_queue)
+                self.offline_queue.clear()
+                for topic, msg in queue_copy:
+                    try:
+                        info = self.client.publish(topic, msg, retain=True)
+                        info.wait_for_publish()
+                        if info.rc == mqtt.MQTT_ERR_SUCCESS:
+                            self.log(f"[SENT-OFFLINE] [{topic}] {msg}")
+                        else:
+                            self.log(f"[FAIL-OFFLINE] Gagal mengirim ke {topic}")
+                    except Exception as e:
+                        self.log(f"[FAIL-OFFLINE] Exception saat kirim ke {topic}: {e}")
             self.root.after(0, lambda: self.btn_connect.config(text="Disconnect", state="normal"))
         else:
             self.update_status(f"Failed RC: {reason_code}", "red")
@@ -124,7 +146,7 @@ class MQTTPublisherGUI:
         self.root.after(0, lambda: self.lbl_status.config(text=f"Status: {text}", foreground=color))
 
     def publish_message(self):
-        if not self.is_connected:
+        if not self.is_connected and not self.keep_send_var.get():
             messagebox.showwarning("Warning", "Belum terhubung ke broker!")
             return
 
@@ -135,12 +157,29 @@ class MQTTPublisherGUI:
             messagebox.showwarning("Warning", "Topic tidak boleh kosong")
             return
 
-        info = self.client.publish(topic, msg)
-        info.wait_for_publish()
-        if info.rc == mqtt.MQTT_ERR_SUCCESS:
-            self.log(f"[SENT] [{topic}] {msg}")
-        else:
-            self.log(f"[FAIL] Gagal mengirim ke {topic}")
+        if self.client is None:
+            if self.keep_send_var.get():
+                self.offline_queue.append((topic, msg))
+                self.log(f"[QUEUED-OFFLINE] [{topic}] {msg}")
+            else:
+                messagebox.showwarning("Warning", "Client MQTT belum diinisialisasi")
+            return
+
+        try:
+            info = self.client.publish(topic, msg, retain=True)
+            info.wait_for_publish()
+            if info.rc == mqtt.MQTT_ERR_SUCCESS:
+                self.log(f"[SENT] [{topic}] {msg}")
+            else:
+                self.log(f"[FAIL] Gagal mengirim ke {topic}")
+                if self.keep_send_var.get():
+                    self.offline_queue.append((topic, msg))
+                    self.log(f"[QUEUED-OFFLINE] [{topic}] {msg}")
+        except Exception as e:
+            self.log(f"[FAIL] Exception saat publish ke {topic}: {e}")
+            if self.keep_send_var.get():
+                self.offline_queue.append((topic, msg))
+                self.log(f"[QUEUED-OFFLINE] [{topic}] {msg}")
 
 if __name__ == "__main__":
     root = tk.Tk()
