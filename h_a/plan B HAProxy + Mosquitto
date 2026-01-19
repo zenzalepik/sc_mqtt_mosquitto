@@ -4,25 +4,35 @@ system_plan:
   platforms: ["Linux", "Windows", "Raspberry Pi"]
   components:
     - MosquittoBroker:
-        description: "Lightweight MQTT broker instances"
+        description: "Lightweight MQTT broker instances running on 1 to N computers"
         size: "1-2 MB per node"
         features: ["Native MQTT", "QoS PUBACK support", "Persistence option"]
+        scalability:
+          min_nodes: 1
+          max_nodes: "Unlimited (optional, e.g. 10 PCs or more)"
     - HAProxyOrNGINX:
-        description: "Load balancer with health check"
+        description: "Load balancer with health check, deployed on 2 or more gateway nodes"
         size: "10-20 MB"
         features: ["Round robin", "Failover", "Health check"]
+        scalability:
+          min_nodes: 1
+          max_nodes: "Optional, recommended 2+ for redundancy"
     - Keepalived:
         description: "VRRP-based Virtual IP for transparent failover between HAProxy nodes"
         size: "~1 MB"
         features:
           ["Virtual IP", "Automatic failover", "Health check integration"]
         notes: "Native on Linux/Raspberry Pi; on Windows use DNS failover or equivalent"
+        scalability:
+          min_nodes: 2
+          max_nodes: "Optional, can be extended to multiple HAProxy gateways"
     - BufferPublisher:
-        description: "SQLite buffer for zero data loss"
+        description: "SQLite buffer for zero data loss, bundled with Python portable client"
         size: "5-10 MB"
         features: ["Message persistence until PUBACK", "Cross-platform support"]
   guarantees:
     - HighAvailability: true
     - Failover: transparent via VIP (Linux/Pi), DNS-based on Windows
     - ZeroDataLoss: true
+    - Scalability: "Supports from 1 node up to unlimited nodes"
   complexity: "Medium"

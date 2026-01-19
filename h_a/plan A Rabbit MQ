@@ -6,18 +6,34 @@ system_plan:
     - ErlangRuntime:
         description: "Required runtime for RabbitMQ"
         size: "20-50 MB"
+        notes: "Mandatory dependency for RabbitMQ cluster"
     - RabbitMQCluster:
         description: "Clustered RabbitMQ nodes with quorum queues"
         size: "15-30 MB per node"
-        features: ["MQTT plugin enabled", "Quorum queues", "Mirrored queues", "Failover automatic"]
+        features:
+          [
+            "MQTT plugin enabled",
+            "Quorum queues",
+            "Mirrored queues",
+            "Automatic failover",
+          ]
+        scalability:
+          min_nodes: 1
+          max_nodes: "Unlimited (optional, e.g. 10 PCs or more)"
     - LoadBalancer:
-        description: "Optional HAProxy/NGINX for VIP access"
+        description: "Optional HAProxy/NGINX for VIP access to RabbitMQ cluster"
         size: "10-20 MB"
+        features: ["Round robin", "Failover", "Health check"]
+        scalability:
+          min_nodes: 1
+          max_nodes: "Optional, recommended 2+ for redundancy"
     - BufferPublisher:
-        description: "SQLite buffer for zero data loss"
+        description: "SQLite buffer for zero data loss, bundled with Python portable client"
         size: "5-10 MB"
+        features: ["Message persistence until PUBACK", "Cross-platform support"]
   guarantees:
     - HighAvailability: true
-    - Failover: native
+    - Failover: native via RabbitMQ quorum/mirrored queues
     - ZeroDataLoss: true
+    - Scalability: "Supports from 1 node up to unlimited nodes"
   complexity: "Medium-High"
