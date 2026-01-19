@@ -6,6 +6,9 @@ from datetime import datetime
 import os
 import sys
 import time
+from dotenv import load_dotenv
+
+load_dotenv()
 
 # Coba import paho-mqtt, jika tidak ada beri instruksi
 try:
@@ -58,13 +61,20 @@ class MosquittoConnectionTester:
     
     def find_mosquitto_path(self):
         """Cari path mosquitto tools secara otomatis"""
-        possible_paths = [
+        possible_paths = []
+        
+        # Check environment variable first
+        env_path = os.getenv("MOSQUITTO_DIR")
+        if env_path:
+            possible_paths.append(env_path)
+
+        possible_paths.extend([
             r"C:\Program Files\mosquitto",
             r"C:\mosquitto",
             os.path.join(os.path.dirname(__file__), "mosquitto"),
             os.path.join(os.getcwd(), "mosquitto"),
             r"C:\Program Files (x86)\mosquitto",
-        ]
+        ])
         
         path_dirs = os.environ.get('PATH', '').split(';')
         possible_paths.extend(path_dirs)
@@ -239,7 +249,7 @@ class MosquittoConnectionTester:
     def get_mosquitto_tool(self, tool_name):
         path = self.path_entry.get().strip()
         if not path:
-            path = self.mosquitto_path or r"C:\Program Files\mosquitto"
+            path = self.mosquitto_path or os.getenv("MOSQUITTO_DIR") or r"C:\Program Files\mosquitto"
         
         possible_names = [
             f"{tool_name}.exe",

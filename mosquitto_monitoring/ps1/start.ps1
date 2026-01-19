@@ -21,7 +21,29 @@ if ($portUsed) {
 }
 
 # Start mosquitto
-cd "C:\Program Files\mosquitto"
-Start-Process -FilePath ".\mosquitto.exe" -ArgumentList "-p $Port -v" -NoNewWindow
-Write-Host "Mosquitto started on port $Port" -ForegroundColor Green
-Write-Host "Press Ctrl+C in the console to stop" -ForegroundColor Yellow
+# Read .env for MOSQUITTO_DIR
+$EnvFile = "d:\Github\sc_mqtt_mosquitto\.env"
+$MosquittoDir = ""
+if (Test-Path $EnvFile) {
+    Get-Content $EnvFile | ForEach-Object {
+        if ($_ -match "MOSQUITTO_DIR=(.*)") {
+            $MosquittoDir = $matches[1]
+        }
+    }
+}
+
+$MosquittoPath = "$MosquittoDir\mosquitto.exe"
+if (-not (Test-Path $MosquittoPath)) {
+     $MosquittoPath = "C:\Program Files\mosquitto\mosquitto.exe"
+     if (-not (Test-Path $MosquittoPath)) {
+        $MosquittoPath = "C:\Program Files (x86)\mosquitto\mosquitto.exe"
+     }
+}
+
+if (Test-Path $MosquittoPath) {
+    Start-Process -FilePath $MosquittoPath -ArgumentList "-p $Port -v" -NoNewWindow
+    Write-Host "Mosquitto started on port $Port using $MosquittoPath" -ForegroundColor Green
+    Write-Host "Press Ctrl+C in the console to stop" -ForegroundColor Yellow
+} else {
+    Write-Host "Error: mosquitto.exe not found." -ForegroundColor Red
+}

@@ -5,6 +5,10 @@ import threading
 import psutil
 import os
 import sys
+from dotenv import load_dotenv
+
+load_dotenv()
+
 
 
 class MosquittoGUI:
@@ -86,12 +90,19 @@ class MosquittoGUI:
         self.log_text.delete(1.0, tk.END)
     
     def find_mosquitto_path(self):
-        possible_paths = [
+        possible_paths = []
+        
+        # Check environment variable first
+        env_path = os.getenv("MOSQUITTO_DIR")
+        if env_path:
+            possible_paths.append(os.path.join(env_path, "mosquitto.exe"))
+
+        possible_paths.extend([
             r"C:\Program Files\mosquitto\mosquitto.exe",
             r"C:\Program Files (x86)\mosquitto\mosquitto.exe",
             os.path.join(os.getcwd(), "mosquitto.exe"),
             r"C:\mosquitto\mosquitto.exe"
-        ]
+        ])
         
         for path in possible_paths:
             if os.path.exists(path):

@@ -7,6 +7,10 @@ from datetime import datetime
 import sys
 import psutil
 import socket
+import os
+from dotenv import load_dotenv
+
+load_dotenv()
 
 class MosquittoMonitorGUI:
     def __init__(self, root):
@@ -244,8 +248,16 @@ class MosquittoMonitorGUI:
             if result == 0:
                 # Try mosquitto_pub if available
                 try:
+                    # Check env path first
+                    mosquitto_dir = os.getenv("MOSQUITTO_DIR")
+                    pub_cmd = "mosquitto_pub"
+                    if mosquitto_dir:
+                        potential_path = os.path.join(mosquitto_dir, "mosquitto_pub.exe")
+                        if os.path.exists(potential_path):
+                            pub_cmd = potential_path
+
                     test_cmd = [
-                        "mosquitto_pub",
+                        pub_cmd,
                         "-h", "localhost",
                         "-p", str(port),
                         "-t", "monitor/test",

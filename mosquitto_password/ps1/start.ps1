@@ -24,9 +24,23 @@ if ($portUsed) {
 }
 
 # Try to find mosquitto.exe
-$MosquittoPath = "C:\Program Files\mosquitto\mosquitto.exe"
+# Read .env for MOSQUITTO_DIR
+$EnvFile = "d:\Github\sc_mqtt_mosquitto\.env"
+$MosquittoDir = ""
+if (Test-Path $EnvFile) {
+    Get-Content $EnvFile | ForEach-Object {
+        if ($_ -match "MOSQUITTO_DIR=(.*)") {
+            $MosquittoDir = $matches[1]
+        }
+    }
+}
+
+$MosquittoPath = "$MosquittoDir\mosquitto.exe"
 if (-not (Test-Path $MosquittoPath)) {
-    $MosquittoPath = "C:\Program Files (x86)\mosquitto\mosquitto.exe"
+    $MosquittoPath = "C:\Program Files\mosquitto\mosquitto.exe"
+    if (-not (Test-Path $MosquittoPath)) {
+        $MosquittoPath = "C:\Program Files (x86)\mosquitto\mosquitto.exe"
+    }
 }
 
 if (Test-Path $MosquittoPath) {
