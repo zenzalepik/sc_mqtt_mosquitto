@@ -12,11 +12,12 @@ class MosquittoMonitorGUI:
     def __init__(self, root):
         self.root = root
         self.root.title("Mosquitto Monitor - Real-time")
-        self.root.geometry("500x600")
+        self.root.geometry("700x600")  # Diperlebar untuk frame tambahan
         
         # Port yang dimonitor
         self.monitor_port = 52345
         self.default_mqtt_port = 1883  # Port default MQTT
+        self.other_services = []  # Menyimpan daftar service lain
         
         # Setup GUI
         self.setup_gui()
@@ -46,19 +47,23 @@ class MosquittoMonitorGUI:
                                   font=status_font, fg="blue")
         self.port_label.pack(side=tk.LEFT, padx=5)
         
-        # ============ FRAME MONITORING PORT 1883 ============
-        self.default_port_frame = tk.Frame(self.root, relief=tk.RIDGE, borderwidth=2)
-        self.default_port_frame.pack(fill=tk.X, pady=(10, 5), padx=10, ipady=5)
+        # ============ FRAME ATAS DUA KOLOM ============
+        top_frame = tk.Frame(self.root)
+        top_frame.pack(fill=tk.X, pady=(10, 5), padx=10)
+        
+        # ============ KOLOM KIRI - PORT 1883 ============
+        left_frame = tk.Frame(top_frame, relief=tk.RIDGE, borderwidth=2)
+        left_frame.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=(0, 5))
         
         # Title for default port monitoring
-        default_title_frame = tk.Frame(self.default_port_frame)
+        default_title_frame = tk.Frame(left_frame)
         default_title_frame.pack(fill=tk.X, pady=(2, 5))
         
         tk.Label(default_title_frame, text="Default MQTT Port Monitor", 
                 font=("Helvetica", 11, "bold"), fg="darkred").pack(side=tk.LEFT)
         
         # Default port status
-        default_status_frame = tk.Frame(self.default_port_frame)
+        default_status_frame = tk.Frame(left_frame)
         default_status_frame.pack(fill=tk.X, pady=2)
         
         # Status dengan detail
@@ -78,7 +83,51 @@ class MosquittoMonitorGUI:
                                              font=("Helvetica", 9))
         self.default_action_button.pack(side=tk.RIGHT, padx=5)
         
-        # Status frame utama (untuk port 52345)
+        # ============ KOLOM KANAN - SERVICE MQTT LAINNYA ============
+        right_frame = tk.Frame(top_frame, relief=tk.RIDGE, borderwidth=2)
+        right_frame.pack(side=tk.RIGHT, fill=tk.BOTH, expand=True, padx=(5, 0))
+        
+        # Title for other services
+        other_title_frame = tk.Frame(right_frame)
+        other_title_frame.pack(fill=tk.X, pady=(2, 5))
+        
+        tk.Label(other_title_frame, text="Other MQTT Services", 
+                font=("Helvetica", 11, "bold"), fg="purple").pack(side=tk.LEFT)
+        
+        # Status untuk service lainnya
+        other_status_frame = tk.Frame(right_frame)
+        other_status_frame.pack(fill=tk.X, pady=2)
+        
+        # Label untuk status service lainnya
+        self.other_status_label = tk.Label(other_status_frame, text="Scanning...", 
+                                         font=status_font, fg="gray")
+        self.other_status_label.pack(side=tk.LEFT, padx=5)
+        
+        # Frame untuk tombol-tombol
+        other_buttons_frame = tk.Frame(other_status_frame)
+        other_buttons_frame.pack(side=tk.RIGHT)
+        
+        # Tombol Kill All (akan muncul hanya jika ada service)
+        self.other_killall_button = tk.Button(other_buttons_frame, text="Kill All", 
+                                            command=self.kill_all_anonymous_services,
+                                            state=tk.DISABLED, bg="darkred", fg="white",
+                                            font=("Helvetica", 8))
+        self.other_killall_button.pack(side=tk.LEFT, padx=2)
+        
+        # Tombol detail
+        self.other_detail_button = tk.Button(other_buttons_frame, text="Detail", 
+                                           command=self.show_other_services_detail,
+                                           state=tk.DISABLED, bg="lightgray", fg="black",
+                                           font=("Helvetica", 8))
+        self.other_detail_button.pack(side=tk.LEFT, padx=2)
+        
+        # Tombol refresh untuk service lainnya
+        self.other_refresh_button = tk.Button(other_buttons_frame, text="Scan", 
+                                            command=self.scan_other_mqtt_services,
+                                            font=("Helvetica", 8), bg="lightblue")
+        self.other_refresh_button.pack(side=tk.LEFT, padx=2)
+        
+        # ============ STATUS FRAME UTAMA ============
         status_frame = tk.Frame(self.root, relief=tk.RAISED, borderwidth=2)
         status_frame.pack(pady=10, padx=20, fill=tk.BOTH, expand=True)
         
@@ -221,11 +270,227 @@ class MosquittoMonitorGUI:
         except:
             return False
     
+    def find_other_mqtt_services(self):
+        """Find MQTT services on other ports (not 1883 or 52345)"""
+        other_services = []
+        
+        try:
+            # Check all listening ports
+            for conn in psutil.net_connections(kind='inet'):
+                if hasattr(conn.laddr, 'port') and conn.status == 'LISTEN':
+                    port = conn.laddr.port
+                    
+                    # Skip ports we're already monitoring
+                    if port in [self.default_mqtt_port, self.monitor_port]:
+                        continue
+                    
+                    # Check if port is in typical MQTT range or is MQTT
+                    if port > 1024 and port < 65535:  # User ports, not system ports
+                        # Try to identify if it's MQTT
+                        try:
+                            # Get process name
+                            proc = psutil.Process(conn.pid)
+                            proc_name = proc.name().lower()
+                            
+                            # Check if it looks like MQTT
+                            mqtt_keywords = ['mosquitto', 'mqtt', 'emqx', 'hivemq', 'vernemq', 'rabbitmq']
+                            is_mqtt_like = any(keyword in proc_name for keyword in mqtt_keywords)
+                            
+                            if is_mqtt_like:
+                                other_services.append({
+                                    'port': port,
+                                    'pid': conn.pid,
+                                    'name': proc.name(),
+                                    'anonymous': True  # Mark as anonymous since not on standard port
+                                })
+                        except:
+                            # Could not get process info, test if it's MQTT
+                            if self.test_mqtt_connection(port):
+                                other_services.append({
+                                    'port': port,
+                                    'pid': None,
+                                    'name': 'Unknown',
+                                    'anonymous': True
+                                })
+        except Exception as e:
+            print(f"Error finding other MQTT services: {e}")
+        
+        return other_services
+    
+    def update_other_services_display(self):
+        """Update display for other MQTT services"""
+        self.other_services = self.find_other_mqtt_services()
+        
+        if self.other_services:
+            # Show warning about anonymous services
+            self.other_status_label.config(
+                text=f"⚠ Service MQTT Anonymous terdeteksi ({len(self.other_services)} service)",
+                fg="red",
+                font=("Helvetica", 10, "bold")
+            )
+            
+            # Enable buttons
+            self.other_killall_button.config(state=tk.NORMAL, bg="darkred", fg="white")
+            self.other_detail_button.config(state=tk.NORMAL, bg="#ff9966", fg="white")
+            
+            # Update frame appearance
+            right_frame = self.other_status_label.master.master
+            right_frame.config(bg="#ffcc99")  # Orange background for warning
+            
+            # Update status bar with details
+            service_ports = [str(s['port']) for s in self.other_services]
+            self.status_bar.config(
+                text=f"{self.status_bar.cget('text')} | Anonymous MQTT pada port: {', '.join(service_ports)}"
+            )
+        else:
+            # No other services found
+            self.other_status_label.config(
+                text="✓ Tidak ada service MQTT lain",
+                fg="darkgreen",
+                font=("Helvetica", 10)
+            )
+            
+            # Disable buttons
+            self.other_killall_button.config(state=tk.DISABLED, bg="lightgray", fg="black")
+            self.other_detail_button.config(state=tk.DISABLED, bg="lightgray", fg="black")
+            
+            # Update frame appearance
+            right_frame = self.other_status_label.master.master
+            right_frame.config(bg="#ccffcc")  # Green background for safe
+    
+    def show_other_services_detail(self):
+        """Show popup with detailed information about other MQTT services"""
+        if not self.other_services:
+            return
+        
+        # Create popup window
+        detail_window = tk.Toplevel(self.root)
+        detail_window.title("Detail Service MQTT Anonymous")
+        detail_window.geometry("400x300")
+        detail_window.resizable(False, False)
+        
+        # Make it modal
+        detail_window.transient(self.root)
+        detail_window.grab_set()
+        
+        # Title
+        title_label = tk.Label(detail_window, 
+                             text="Service MQTT Anonymous Terdeteksi",
+                             font=("Helvetica", 12, "bold"),
+                             fg="red")
+        title_label.pack(pady=10)
+        
+        # Frame for list
+        list_frame = tk.Frame(detail_window)
+        list_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=5)
+        
+        # Create scrolled text for details
+        from tkinter import scrolledtext
+        detail_text = scrolledtext.ScrolledText(list_frame, width=50, height=15)
+        detail_text.pack(fill=tk.BOTH, expand=True)
+        
+        # Add header
+        detail_text.insert(tk.END, "="*50 + "\n")
+        detail_text.insert(tk.END, "DETAIL SERVICE MQTT ANONYMOUS\n")
+        detail_text.insert(tk.END, "="*50 + "\n\n")
+        
+        # Add service details
+        for i, service in enumerate(self.other_services, 1):
+            detail_text.insert(tk.END, f"[Service #{i}]\n")
+            detail_text.insert(tk.END, f"Port: {service['port']}\n")
+            
+            if service['pid']:
+                detail_text.insert(tk.END, f"PID: {service['pid']}\n")
+            else:
+                detail_text.insert(tk.END, f"PID: Tidak diketahui\n")
+            
+            detail_text.insert(tk.END, f"Nama Process: {service['name']}\n")
+            detail_text.insert(tk.END, f"Status: Anonymous MQTT Service\n")
+            detail_text.insert(tk.END, "-"*30 + "\n\n")
+        
+        # Add summary
+        detail_text.insert(tk.END, f"\nTotal: {len(self.other_services)} service anonymous\n")
+        
+        # Make text read-only
+        detail_text.config(state=tk.DISABLED)
+        
+        # Close button
+        close_button = tk.Button(detail_window, text="Tutup", 
+                               command=detail_window.destroy,
+                               bg="lightgray", font=("Helvetica", 10))
+        close_button.pack(pady=10)
+        
+        # Center the window
+        detail_window.update_idletasks()
+        width = detail_window.winfo_width()
+        height = detail_window.winfo_height()
+        x = (self.root.winfo_screenwidth() // 2) - (width // 2)
+        y = (self.root.winfo_screenheight() // 2) - (height // 2)
+        detail_window.geometry(f'{width}x{height}+{x}+{y}')
+    
+    def kill_all_anonymous_services(self):
+        """Kill all anonymous MQTT services"""
+        if not self.other_services:
+            return
+        
+        # Ask for confirmation
+        service_count = len(self.other_services)
+        service_ports = [str(s['port']) for s in self.other_services]
+        
+        confirm_msg = f"Kill semua {service_count} service MQTT anonymous?\n\n"
+        confirm_msg += f"Port yang akan di-kill: {', '.join(service_ports)}\n\n"
+        confirm_msg += "Tindakan ini tidak dapat dibatalkan!"
+        
+        if not messagebox.askyesno("Konfirmasi Kill All", confirm_msg):
+            return
+        
+        killed_count = 0
+        failed_count = 0
+        
+        # Kill each service
+        for service in self.other_services:
+            try:
+                if service['pid']:
+                    try:
+                        process = psutil.Process(service['pid'])
+                        process.terminate()
+                        
+                        # Wait a bit for termination
+                        try:
+                            process.wait(timeout=1)
+                        except:
+                            pass
+                        
+                        killed_count += 1
+                        
+                    except Exception as e:
+                        # Try force kill
+                        try:
+                            process = psutil.Process(service['pid'])
+                            process.kill()
+                            killed_count += 1
+                        except:
+                            failed_count += 1
+            except:
+                failed_count += 1
+        
+        # Show result
+        result_msg = f"Berhasil kill {killed_count} service\n"
+        if failed_count > 0:
+            result_msg += f"Gagal kill {failed_count} service\n"
+        
+        messagebox.showinfo("Hasil Kill All", result_msg)
+        
+        # Refresh display
+        self.status_bar.config(text=f"Killed {killed_count} anonymous MQTT services")
+        self.update_other_services_display()
+    
     def update_default_port_display(self, default_active, default_pid, default_name):
         """Update the display for default port monitoring"""
         if default_active:
             # Update frame appearance
-            self.default_port_frame.config(bg="#ffcccc", relief=tk.RIDGE, borderwidth=3)
+            left_frame = self.default_status_label.master.master
+            left_frame.config(bg="#ffcccc", relief=tk.RIDGE, borderwidth=3)
             
             # Update status label
             self.default_status_label.config(
@@ -245,7 +510,8 @@ class MosquittoMonitorGUI:
             
         else:
             # Update frame appearance
-            self.default_port_frame.config(bg="#ccffcc", relief=tk.RIDGE, borderwidth=2)
+            left_frame = self.default_status_label.master.master
+            left_frame.config(bg="#ccffcc", relief=tk.RIDGE, borderwidth=2)
             
             # Update status label
             self.default_status_label.config(
@@ -270,11 +536,14 @@ class MosquittoMonitorGUI:
             current_time = datetime.now().strftime("%H:%M:%S")
             self.time_label.config(text=f"Last check: {current_time}")
             
-            # Check default port (1883) - diupdate pertama
+            # Check default port (1883)
             default_active, default_pid, default_name = self.check_port_status(self.default_mqtt_port)
             
             # Update display untuk port 1883
             self.update_default_port_display(default_active, default_pid, default_name)
+            
+            # Check and update other MQTT services
+            self.update_other_services_display()
             
             # Check monitor port (52345)
             monitor_active, monitor_pid, monitor_name = self.check_port_status(self.monitor_port)
@@ -306,14 +575,16 @@ class MosquittoMonitorGUI:
                 self.summary_label.config(text=f"✅ PORT {self.monitor_port} ACTIVE", fg="green")
                 self.status_bar.config(
                     text=f"Port {self.monitor_port} active | "
-                         f"Default port 1883: {'ACTIVE (check above)' if default_active else 'inactive'} | "
+                         f"Default port 1883: {'ACTIVE' if default_active else 'inactive'} | "
+                         f"Other MQTT: {len(self.other_services)} service(s) | "
                          f"Updated: {current_time}"
                 )
             else:
                 self.summary_label.config(text=f"❌ PORT {self.monitor_port} INACTIVE", fg="red")
                 self.status_bar.config(
                     text=f"Port {self.monitor_port} not active | "
-                         f"Default port 1883: {'ACTIVE (check above)' if default_active else 'inactive'} | "
+                         f"Default port 1883: {'ACTIVE' if default_active else 'inactive'} | "
+                         f"Other MQTT: {len(self.other_services)} service(s) | "
                          f"Updated: {current_time}"
                 )
                 
@@ -322,6 +593,12 @@ class MosquittoMonitorGUI:
         
         # Schedule next update (every 2 seconds)
         self.root.after(2000, self.update_status)
+    
+    def scan_other_mqtt_services(self):
+        """Manual scan for other MQTT services"""
+        self.status_bar.config(text="Scanning for other MQTT services...")
+        self.update_other_services_display()
+        self.status_bar.config(text="Scan completed" + self.status_bar.cget('text').split('Scan completed')[-1])
     
     def force_refresh(self):
         """Force immediate refresh"""
