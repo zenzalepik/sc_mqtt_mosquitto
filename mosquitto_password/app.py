@@ -22,11 +22,16 @@ class MosquittoMonitorGUI:
     def __init__(self, root):
         self.root = root
         self.root.title("Mosquitto Monitor - Real-time (Password)")
-        self.root.geometry("700x600")
+        self.root.geometry("700x650")
         
         self.monitor_port = 52345
         self.default_mqtt_port = 1883
         self.other_services = []
+        
+        # Variabel untuk auto-kill
+        self.auto_kill_enabled = tk.BooleanVar(value=False)
+        self.kill_thread = None
+        self.kill_running = False
         
         self.setup_gui()
         
@@ -43,6 +48,40 @@ class MosquittoMonitorGUI:
         title_label = tk.Label(self.root, text="Mosquitto MQTT Monitor (Password)", font=title_font)
         title_label.pack(pady=10)
         
+        # Frame untuk auto-kill checkbox
+        auto_kill_frame = tk.Frame(self.root, relief=tk.RIDGE, borderwidth=2, bg="#f0f0f0")
+        auto_kill_frame.pack(fill=tk.X, pady=(0, 10), padx=10)
+        
+        self.auto_kill_checkbox = tk.Checkbutton(
+            auto_kill_frame,
+            text=" Auto Kill Mosquitto 1883 & Anonymous Mosquitto",
+            variable=self.auto_kill_enabled,
+            font=("Helvetica", 10, "bold"),
+            fg="darkred",
+            bg="#f0f0f0",
+            command=self.toggle_auto_kill
+        )
+        self.auto_kill_checkbox.pack(side=tk.LEFT, padx=10, pady=5)
+        
+        self.auto_kill_status = tk.Label(
+            auto_kill_frame,
+            text="[OFF]",
+            font=("Helvetica", 9),
+            fg="red",
+            bg="#f0f0f0"
+        )
+        self.auto_kill_status.pack(side=tk.LEFT, padx=5)
+        
+        # Info label untuk auto-kill
+        auto_kill_info = tk.Label(
+            auto_kill_frame,
+            text="(Akan otomatis kill service yang tidak aman setiap detik)",
+            font=("Helvetica", 8),
+            fg="gray",
+            bg="#f0f0f0"
+        )
+        auto_kill_info.pack(side=tk.RIGHT, padx=10)
+        
         port_frame = tk.Frame(self.root)
         port_frame.pack(pady=5)
         tk.Label(port_frame, text="Monitoring Port:", font=status_font).pack(side=tk.LEFT)
@@ -53,16 +92,16 @@ class MosquittoMonitorGUI:
         top_frame = tk.Frame(self.root)
         top_frame.pack(fill=tk.X, pady=(10, 5), padx=10)
         
-        left_frame = tk.Frame(top_frame, relief=tk.RIDGE, borderwidth=2)
-        left_frame.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=(0, 5))
+        self.left_frame = tk.Frame(top_frame, relief=tk.RIDGE, borderwidth=2)
+        self.left_frame.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=(0, 5))
         
-        default_title_frame = tk.Frame(left_frame)
+        default_title_frame = tk.Frame(self.left_frame)
         default_title_frame.pack(fill=tk.X, pady=(2, 5))
         
         tk.Label(default_title_frame, text="Default MQTT Port Monitor", 
                 font=("Helvetica", 11, "bold"), fg="darkred").pack(side=tk.LEFT)
         
-        default_status_frame = tk.Frame(left_frame)
+        default_status_frame = tk.Frame(self.left_frame)
         default_status_frame.pack(fill=tk.X, pady=2)
         
         self.default_status_label = tk.Label(default_status_frame, text="Checking...", 
@@ -79,16 +118,16 @@ class MosquittoMonitorGUI:
                                              font=("Helvetica", 9))
         self.default_action_button.pack(side=tk.RIGHT, padx=5)
         
-        right_frame = tk.Frame(top_frame, relief=tk.RIDGE, borderwidth=2)
-        right_frame.pack(side=tk.RIGHT, fill=tk.BOTH, expand=True, padx=(5, 0))
+        self.right_frame = tk.Frame(top_frame, relief=tk.RIDGE, borderwidth=2)
+        self.right_frame.pack(side=tk.RIGHT, fill=tk.BOTH, expand=True, padx=(5, 0))
         
-        other_title_frame = tk.Frame(right_frame)
+        other_title_frame = tk.Frame(self.right_frame)
         other_title_frame.pack(fill=tk.X, pady=(2, 5))
         
         tk.Label(other_title_frame, text="Other MQTT Services", 
                 font=("Helvetica", 11, "bold"), fg="purple").pack(side=tk.LEFT)
         
-        other_status_frame = tk.Frame(right_frame)
+        other_status_frame = tk.Frame(self.right_frame)
         other_status_frame.pack(fill=tk.X, pady=2)
         
         self.other_status_label = tk.Label(other_status_frame, text="Scanning...", 
@@ -302,8 +341,7 @@ class MosquittoMonitorGUI:
             self.other_killall_button.config(state=tk.NORMAL, bg="darkred", fg="white")
             self.other_detail_button.config(state=tk.NORMAL, bg="#ff9966", fg="white")
             
-            right_frame = self.other_status_label.master.master
-            right_frame.config(bg="#ffcc99")
+            self.right_frame.config(bg="#ffcc99")
             
             service_ports = [str(s['port']) for s in self.other_services]
             self.status_bar.config(
@@ -319,8 +357,7 @@ class MosquittoMonitorGUI:
             self.other_killall_button.config(state=tk.DISABLED, bg="lightgray", fg="black")
             self.other_detail_button.config(state=tk.DISABLED, bg="lightgray", fg="black")
             
-            right_frame = self.other_status_label.master.master
-            right_frame.config(bg="#ccffcc")
+            self.right_frame.config(bg="#ccffcc")
     
     def show_other_services_detail(self):
         if not self.other_services:
@@ -432,8 +469,7 @@ class MosquittoMonitorGUI:
     
     def update_default_port_display(self, default_active, default_pid, default_name):
         if default_active:
-            left_frame = self.default_status_label.master.master
-            left_frame.config(bg="#ffcccc", relief=tk.RIDGE, borderwidth=3)
+            self.left_frame.config(bg="#ffcccc", relief=tk.RIDGE, borderwidth=3)
             
             self.default_status_label.config(
                 text="⚠ WARNING: Default Port 1883 is ACTIVE!",
@@ -449,8 +485,7 @@ class MosquittoMonitorGUI:
             self.default_action_button.config(state=tk.NORMAL, bg="red", fg="white")
             
         else:
-            left_frame = self.default_status_label.master.master
-            left_frame.config(bg="#ccffcc", relief=tk.RIDGE, borderwidth=2)
+            self.left_frame.config(bg="#ccffcc", relief=tk.RIDGE, borderwidth=2)
             
             self.default_status_label.config(
                 text="✓ Default Port 1883 is inactive",
@@ -529,6 +564,76 @@ class MosquittoMonitorGUI:
         self.status_bar.config(text="Manual refresh triggered...")
         self.update_status()
     
+    def toggle_auto_kill(self):
+        if self.auto_kill_enabled.get():
+            # Enable Auto Kill
+            if messagebox.askyesno("Confirm Auto Kill", 
+                                 "Warning: This will AUTOMATICALLY KILL any process on port 1883\n"
+                                 "and any other anonymous MQTT services every second.\n\n"
+                                 "Are you sure you want to enable this?"):
+                self.kill_running = True
+                self.auto_kill_status.config(text="[ON]", fg="green")
+                self.auto_kill_checkbox.config(fg="green")
+                
+                # Start thread
+                if self.kill_thread is None or not self.kill_thread.is_alive():
+                    self.kill_thread = threading.Thread(target=self.auto_kill_loop, daemon=True)
+                    self.kill_thread.start()
+                    
+                self.status_bar.config(text="Auto Kill STARTED - Monitoring every 1 second")
+            else:
+                self.auto_kill_enabled.set(False)
+        else:
+            # Disable Auto Kill
+            if messagebox.askyesno("Confirm Stop", "Stop Auto Kill monitoring?"):
+                self.kill_running = False
+                self.auto_kill_status.config(text="[OFF]", fg="red")
+                self.auto_kill_checkbox.config(fg="darkred")
+                self.status_bar.config(text="Auto Kill STOPPED")
+            else:
+                self.auto_kill_enabled.set(True)
+
+    def auto_kill_loop(self):
+        while self.kill_running and self.running:
+            try:
+                # 1. Kill Default Port 1883
+                active, pid, name = self.check_port_status(self.default_mqtt_port)
+                if active and pid:
+                    self.silent_kill_pid(pid, f"Port {self.default_mqtt_port}")
+                
+                # 2. Kill Anonymous Services
+                # Re-scan to be sure
+                other_services = self.find_other_mqtt_services()
+                for service in other_services:
+                    if service['pid']:
+                        self.silent_kill_pid(service['pid'], f"Anonymous Port {service['port']}")
+                
+                # Update UI via main thread is tricky if not using after()
+                # But Tkinter is somewhat thread-safe for simple config, or we can rely on main update loop
+                # to reflect changes.
+                
+            except Exception as e:
+                print(f"Auto kill error: {e}")
+            
+            time.sleep(1)
+            
+    def silent_kill_pid(self, pid, description):
+        try:
+            process = psutil.Process(pid)
+            process.terminate()
+            try:
+                process.wait(timeout=1)
+            except:
+                process.kill()
+            print(f"[Auto Kill] Terminated {description} (PID: {pid})")
+        except Exception as e:
+            print(f"[Auto Kill] Failed to kill {description} (PID: {pid}): {e}")
+
+    def stop_auto_kill_thread(self):
+        self.kill_running = False
+        if self.kill_thread and self.kill_thread.is_alive():
+            self.kill_thread.join(timeout=1.0)
+
     def kill_default_port(self):
         try:
             default_active, default_pid, default_name = self.check_port_status(self.default_mqtt_port)
@@ -569,6 +674,7 @@ class MosquittoMonitorGUI:
             self.status_bar.config(text=f"Error checking port: {str(e)[:50]}")
     
     def on_closing(self):
+        self.stop_auto_kill_thread()
         self.running = False
         self.root.destroy()
 
