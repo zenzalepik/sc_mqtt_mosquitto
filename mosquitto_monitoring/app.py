@@ -12,14 +12,11 @@ class MosquittoMonitorGUI:
     def __init__(self, root):
         self.root = root
         self.root.title("Mosquitto Monitor - Real-time")
-        self.root.geometry("500x500")
+        self.root.geometry("500x600")
         
         # Port yang dimonitor
         self.monitor_port = 52345
         self.default_mqtt_port = 1883  # Port default MQTT
-        
-        # Flag untuk default port warning
-        self.default_port_warning_shown = False
         
         # Setup GUI
         self.setup_gui()
@@ -49,16 +46,39 @@ class MosquittoMonitorGUI:
                                   font=status_font, fg="blue")
         self.port_label.pack(side=tk.LEFT, padx=5)
         
-        # WARNING FRAME - untuk port 1883
-        self.warning_frame = tk.Frame(self.root, bg="yellow", height=40)
-        self.warning_frame.pack(fill=tk.X, pady=(10, 5), padx=10)
-        self.warning_frame.pack_propagate(False)  # Maintain frame height
+        # ============ FRAME MONITORING PORT 1883 ============
+        self.default_port_frame = tk.Frame(self.root, relief=tk.RIDGE, borderwidth=2)
+        self.default_port_frame.pack(fill=tk.X, pady=(10, 5), padx=10, ipady=5)
         
-        self.warning_label = tk.Label(self.warning_frame, text="", 
-                                     font=warning_font, bg="yellow", fg="red")
-        self.warning_label.pack(pady=10)
+        # Title for default port monitoring
+        default_title_frame = tk.Frame(self.default_port_frame)
+        default_title_frame.pack(fill=tk.X, pady=(2, 5))
         
-        # Status frame
+        tk.Label(default_title_frame, text="Default MQTT Port Monitor", 
+                font=("Helvetica", 11, "bold"), fg="darkred").pack(side=tk.LEFT)
+        
+        # Default port status
+        default_status_frame = tk.Frame(self.default_port_frame)
+        default_status_frame.pack(fill=tk.X, pady=2)
+        
+        # Status dengan detail
+        self.default_status_label = tk.Label(default_status_frame, text="Checking...", 
+                                           font=status_font)
+        self.default_status_label.pack(side=tk.LEFT, padx=5)
+        
+        # Detail info (PID, Process Name)
+        self.default_detail_label = tk.Label(default_status_frame, text="", 
+                                           font=status_font, fg="gray")
+        self.default_detail_label.pack(side=tk.LEFT, padx=20)
+        
+        # Tombol aksi untuk port 1883
+        self.default_action_button = tk.Button(default_status_frame, text="Kill Process", 
+                                             command=self.kill_default_port, 
+                                             state=tk.DISABLED, bg="orange", fg="white",
+                                             font=("Helvetica", 9))
+        self.default_action_button.pack(side=tk.RIGHT, padx=5)
+        
+        # Status frame utama (untuk port 52345)
         status_frame = tk.Frame(self.root, relief=tk.RAISED, borderwidth=2)
         status_frame.pack(pady=10, padx=20, fill=tk.BOTH, expand=True)
         
@@ -66,23 +86,17 @@ class MosquittoMonitorGUI:
         self.time_label = tk.Label(status_frame, text="Last check: --:--:--", font=status_font)
         self.time_label.pack(pady=5)
         
+        # Separator
+        ttk.Separator(status_frame, orient='horizontal').pack(fill=tk.X, pady=5)
+        
         # Monitor Port Status (52345)
         monitor_frame = tk.Frame(status_frame)
         monitor_frame.pack(pady=5, fill=tk.X)
-        tk.Label(monitor_frame, text=f"Port {self.monitor_port}:", font=status_font, 
+        tk.Label(monitor_frame, text=f"Your Port {self.monitor_port}:", font=status_font, 
                 width=20, anchor="w").pack(side=tk.LEFT)
         self.monitor_status = tk.Label(monitor_frame, text="CHECKING...", 
                                       font=status_font, width=15)
         self.monitor_status.pack(side=tk.LEFT)
-        
-        # Default Port Status (1883)
-        default_frame = tk.Frame(status_frame)
-        default_frame.pack(pady=5, fill=tk.X)
-        tk.Label(default_frame, text=f"Port {self.default_mqtt_port} (default):", 
-                font=status_font, width=20, anchor="w").pack(side=tk.LEFT)
-        self.default_status = tk.Label(default_frame, text="CHECKING...", 
-                                      font=status_font, width=15)
-        self.default_status.pack(side=tk.LEFT)
         
         # Process status
         process_frame = tk.Frame(status_frame)
@@ -110,6 +124,9 @@ class MosquittoMonitorGUI:
                                    font=status_font, width=15)
         self.conn_status.pack(side=tk.LEFT)
         
+        # Separator
+        ttk.Separator(status_frame, orient='horizontal').pack(fill=tk.X, pady=10)
+        
         # Summary status
         self.summary_label = tk.Label(status_frame, text="", font=title_font, pady=10)
         self.summary_label.pack()
@@ -120,9 +137,6 @@ class MosquittoMonitorGUI:
         
         tk.Button(button_frame, text="Refresh Now", command=self.force_refresh,
                  bg="lightblue").pack(side=tk.LEFT, padx=5)
-        
-        tk.Button(button_frame, text="Kill Default (1883)", command=self.kill_default_port,
-                 bg="orange", fg="white").pack(side=tk.LEFT, padx=5)
         
         # Status bar
         self.status_bar = tk.Label(self.root, text="Monitoring started...", 
@@ -207,34 +221,44 @@ class MosquittoMonitorGUI:
         except:
             return False
     
-    def update_warning_display(self, default_port_active):
-        """Update the warning display based on port 1883 status"""
-        if default_port_active:
-            self.warning_frame.config(bg="red")
-            self.warning_label.config(
-                text="⚠ WARNING: MQTT Default Port 1883 is Active! ⚠",
-                bg="red", fg="white", font=("Helvetica", 12, "bold")
+    def update_default_port_display(self, default_active, default_pid, default_name):
+        """Update the display for default port monitoring"""
+        if default_active:
+            # Update frame appearance
+            self.default_port_frame.config(bg="#ffcccc", relief=tk.RIDGE, borderwidth=3)
+            
+            # Update status label
+            self.default_status_label.config(
+                text="⚠ WARNING: Default Port 1883 is ACTIVE!",
+                fg="red",
+                font=("Helvetica", 10, "bold")
             )
             
-            # Show messagebox once if not already shown
-            if not self.default_port_warning_shown:
-                self.root.after(100, lambda: messagebox.showwarning(
-                    "Security Warning",
-                    "Default MQTT port 1883 is active!\n\n"
-                    "This may indicate:\n"
-                    "1. Another Mosquitto instance running\n"
-                    "2. Default installation running\n"
-                    "3. Potential security risk\n\n"
-                    "Consider stopping it if not needed."
-                ))
-                self.default_port_warning_shown = True
+            # Update detail info
+            detail_text = f"PID: {default_pid if default_pid else 'Unknown'}"
+            if default_name and default_name != "Unknown":
+                detail_text += f" | Process: {default_name}"
+            self.default_detail_label.config(text=detail_text, fg="darkred")
+            
+            # Enable kill button
+            self.default_action_button.config(state=tk.NORMAL, bg="red", fg="white")
+            
         else:
-            self.warning_frame.config(bg="lightgreen")
-            self.warning_label.config(
-                text="✓ Default Port 1883 is not in use",
-                bg="lightgreen", fg="darkgreen"
+            # Update frame appearance
+            self.default_port_frame.config(bg="#ccffcc", relief=tk.RIDGE, borderwidth=2)
+            
+            # Update status label
+            self.default_status_label.config(
+                text="✓ Default Port 1883 is inactive",
+                fg="darkgreen",
+                font=("Helvetica", 10)
             )
-            self.default_port_warning_shown = False
+            
+            # Clear detail info
+            self.default_detail_label.config(text="No service detected", fg="gray")
+            
+            # Disable kill button
+            self.default_action_button.config(state=tk.DISABLED, bg="lightgray", fg="black")
     
     def update_status(self):
         """Update all status indicators"""
@@ -245,6 +269,12 @@ class MosquittoMonitorGUI:
             # Update time
             current_time = datetime.now().strftime("%H:%M:%S")
             self.time_label.config(text=f"Last check: {current_time}")
+            
+            # Check default port (1883) - diupdate pertama
+            default_active, default_pid, default_name = self.check_port_status(self.default_mqtt_port)
+            
+            # Update display untuk port 1883
+            self.update_default_port_display(default_active, default_pid, default_name)
             
             # Check monitor port (52345)
             monitor_active, monitor_pid, monitor_name = self.check_port_status(self.monitor_port)
@@ -261,17 +291,6 @@ class MosquittoMonitorGUI:
                 self.monitor_status.config(text="INACTIVE", fg="red")
                 self.conn_status.config(text="DISCONNECTED", fg="red")
             
-            # Check default port (1883)
-            default_active, default_pid, default_name = self.check_port_status(self.default_mqtt_port)
-            
-            if default_active:
-                self.default_status.config(text="ACTIVE ⚠", fg="red", font=("Helvetica", 10, "bold"))
-            else:
-                self.default_status.config(text="INACTIVE", fg="darkgreen")
-            
-            # Update warning display
-            self.update_warning_display(default_active)
-            
             # Check mosquitto process
             process_running, process_pid, process_name = self.check_mosquitto_process()
             
@@ -285,13 +304,21 @@ class MosquittoMonitorGUI:
             # Update summary
             if monitor_active:
                 self.summary_label.config(text=f"✅ PORT {self.monitor_port} ACTIVE", fg="green")
-                self.status_bar.config(text=f"Port {self.monitor_port} active | Default port 1883: {'ACTIVE ⚠' if default_active else 'inactive'}")
+                self.status_bar.config(
+                    text=f"Port {self.monitor_port} active | "
+                         f"Default port 1883: {'ACTIVE (check above)' if default_active else 'inactive'} | "
+                         f"Updated: {current_time}"
+                )
             else:
                 self.summary_label.config(text=f"❌ PORT {self.monitor_port} INACTIVE", fg="red")
-                self.status_bar.config(text=f"Port {self.monitor_port} not active | Monitoring port 1883...")
+                self.status_bar.config(
+                    text=f"Port {self.monitor_port} not active | "
+                         f"Default port 1883: {'ACTIVE (check above)' if default_active else 'inactive'} | "
+                         f"Updated: {current_time}"
+                )
                 
         except Exception as e:
-            self.status_bar.config(text=f"Error: {str(e)}")
+            self.status_bar.config(text=f"Error: {str(e)[:50]}...")
         
         # Schedule next update (every 2 seconds)
         self.root.after(2000, self.update_status)
@@ -309,28 +336,41 @@ class MosquittoMonitorGUI:
             if default_active and default_pid:
                 try:
                     process = psutil.Process(default_pid)
+                    
+                    # Ask for confirmation
+                    if not messagebox.askyesno("Confirm Kill", 
+                                             f"Kill process on port 1883?\n\n"
+                                             f"PID: {default_pid}\n"
+                                             f"Process: {default_name if default_name else 'Unknown'}\n\n"
+                                             f"This may stop important services."):
+                        return
+                    
                     process.terminate()
                     
                     # Wait for process to terminate
                     try:
                         process.wait(timeout=3)
-                        messagebox.showinfo("Success", f"Process on port 1883 (PID: {default_pid}) terminated successfully.")
+                        self.status_bar.config(text=f"Process on port 1883 (PID: {default_pid}) terminated.")
+                        
+                        # Update display immediately
+                        self.update_default_port_display(False, None, None)
+                        
                     except:
                         process.kill()
-                        messagebox.showinfo("Success", f"Process on port 1883 (PID: {default_pid}) force killed.")
-                    
-                    self.status_bar.config(text=f"Killed process on port 1883 (PID: {default_pid})")
+                        self.status_bar.config(text=f"Process on port 1883 (PID: {default_pid}) force killed.")
+                        
+                        # Update display immediately
+                        self.update_default_port_display(False, None, None)
                     
                 except Exception as e:
-                    messagebox.showerror("Error", f"Failed to kill process: {str(e)}")
+                    self.status_bar.config(text=f"Failed to kill process: {str(e)[:50]}")
             elif default_active:
-                messagebox.showwarning("Warning", "Port 1883 is active but cannot identify process.\n"
-                                                "You may need to stop it manually.")
+                self.status_bar.config(text="Port 1883 active but cannot identify process.")
             else:
-                messagebox.showinfo("Info", "Port 1883 is already inactive.")
+                self.status_bar.config(text="Port 1883 is already inactive.")
                 
         except Exception as e:
-            messagebox.showerror("Error", f"Error checking port: {str(e)}")
+            self.status_bar.config(text=f"Error checking port: {str(e)[:50]}")
     
     def on_closing(self):
         """Handle window closing"""
