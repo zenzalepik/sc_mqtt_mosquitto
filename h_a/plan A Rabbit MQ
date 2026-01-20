@@ -1,39 +1,84 @@
-# Prompt: Build a complete HA MQTT system plan using RabbitMQ Cluster
-system_plan:
-  name: "RabbitMQ Cluster HA MQTT"
-  platforms: ["Linux", "Windows", "Raspberry Pi"]
-  components:
-    - ErlangRuntime:
-        description: "Required runtime for RabbitMQ"
-        size: "20-50 MB"
-        notes: "Mandatory dependency for RabbitMQ cluster"
-    - RabbitMQCluster:
-        description: "Clustered RabbitMQ nodes with quorum queues"
-        size: "15-30 MB per node"
-        features:
-          [
-            "MQTT plugin enabled",
-            "Quorum queues",
-            "Mirrored queues",
-            "Automatic failover",
-          ]
-        scalability:
-          min_nodes: 1
-          max_nodes: "Unlimited (optional, e.g. 10 PCs or more)"
-    - LoadBalancer:
-        description: "Optional HAProxy/NGINX for VIP access to RabbitMQ cluster"
-        size: "10-20 MB"
-        features: ["Round robin", "Failover", "Health check"]
-        scalability:
-          min_nodes: 1
-          max_nodes: "Optional, recommended 2+ for redundancy"
-    - BufferPublisher:
-        description: "SQLite buffer for zero data loss, bundled with Python portable client"
-        size: "5-10 MB"
-        features: ["Message persistence until PUBACK", "Cross-platform support"]
-  guarantees:
-    - HighAvailability: true
-    - Failover: native via RabbitMQ quorum/mirrored queues
-    - ZeroDataLoss: true
-    - Scalability: "Supports from 1 node up to unlimited nodes"
-  complexity: "Medium-High"
+# RENCANA EKSEKUSI: RabbitMQ Cluster High Availability (Cross-Platform)
+
+Dokumen ini merinci langkah-langkah implementasi sistem MQTT High Availability menggunakan RabbitMQ Cluster yang mendukung penuh:
+1.  **Windows (Non-WSL)**
+2.  **Linux Ubuntu**
+3.  **Raspberry Pi (Raspbian/Debian)**
+
+## 1. Arsitektur Sistem
+Sistem ini menggunakan **Client-Side Failover** yang didukung oleh **RabbitMQ Cluster**. Sistem bersifat agnostik platform, artinya node-node dalam cluster bisa berupa campuran dari Windows, Linux, dan Raspberry Pi.
+
+### Prinsip Skalabilitas:
+*   **Minimal**: 1 Node (Single Server).
+*   **Rekomendasi HA**: 3 Node.
+*   **Maksimal**: Tidak terbatas (bisa 10+ komputer).
+*   **Fleksibilitas**: Anda bisa menambah node kapan saja ke dalam cluster tanpa mematikan sistem (Zero Downtime Expansion).
+
+### Komponen Utama:
+1.  **RabbitMQ Nodes (Distributed)**
+    *   Setiap komputer (PC 1 s.d PC 10) menjalankan 1 instance RabbitMQ.
+    *   Semua node terhubung dalam satu **Cluster**.
+    *   **Fitur**: Data direplikasi antar node (Quorum Queues). Jika PC 1 mati, PC 2 mengambil alih data dan koneksi.
+    *   **Port Standar**: 5672 (AMQP), 15672 (Admin), 1883 (MQTT).
+
+2.  **Smart Client (Publisher & Subscriber)**
+    *   Aplikasi klien menyimpan daftar IP seluruh node (misal: `192.168.1.101`, `192.168.1.102`, dst).
+    *   **Auto-Discovery (Opsional)**: Client bisa connect ke satu node, lalu otomatis "belajar" topologi cluster.
+    *   **Failover Logic**: Jika koneksi ke PC 1 putus, otomatis coba ke PC 2, lalu PC 3, dst.
+    *   **Buffer Lokal (SQLite)**: Menyimpan pesan saat semua node mati, dikirim ulang saat koneksi pulih (Zero Data Loss).
+
+## 2. Persiapan Lingkungan (Prerequisites)
+Sebelum eksekusi, software berikut harus disiapkan:
+1.  **Erlang/OTP**: Runtime wajib untuk RabbitMQ.
+    *   *Target*: Install versi terbaru yang kompatibel.
+2.  **RabbitMQ Server**: Binary server.
+    *   *Target*: Install di path standar, tapi kita akan jalankan instance kustom.
+
+## 3. Langkah Eksekusi (Step-by-Step)
+
+### Tahap 1: Instalasi Dependensi
+*   **Windows**:
+    *   Download installer Erlang & RabbitMQ dari situs resmi.
+    *   Atau gunakan Scoop: `scoop install erlang rabbitmq`.
+    *   Set Environment Variable `ERLANG_HOME`.
+*   **Linux / Raspberry Pi**:
+    *   Jalankan: `sudo apt-get update && sudo apt-get install rabbitmq-server -y`.
+    *   Pastikan service jalan: `sudo systemctl enable rabbitmq-server --now`.
+
+### Tahap 2: Setup Multi-Node (Localhost Simulation & Real Deployment)
+*   **Mode A (Simulasi 1 Device)**:
+    *   **Windows**: Jalankan script `start_cluster_localhost.bat`.
+    *   **Linux/RPi**: Jalankan script `start_cluster_localhost.sh`.
+    *   Hasil: 3 node berjalan di port berbeda (1883, 1884, 1885).
+    
+*   **Mode B (Real Deployment 10+ Device)**:
+    *   Install RabbitMQ di setiap Device (PC/RPi).
+    *   **Sinkronisasi Erlang Cookie** (Wajib Sama):
+        *   Windows: `C:\Windows\System32\config\systemprofile\.erlang.cookie` atau `%USERPROFILE%\.erlang.cookie`
+        *   Linux/RPi: `/var/lib/rabbitmq/.erlang.cookie`
+    *   **Join Cluster**:
+        *   Master (Node 1): Biarkan jalan normal.
+        *   Slave (Node Lain): Stop app, reset, lalu `rabbitmqctl join_cluster rabbit@IP_NODE_1`.
+    *   Semua device akan menjadi satu kesatuan cluster raksasa.
+
+### Tahap 3: Aktivasi Cluster & Plugin
+*   Enable plugin `rabbitmq_management` (Web Admin).
+*   Enable plugin `rabbitmq_mqtt` (Protokol MQTT).
+*   Perintah `rabbitmqctl join_cluster` untuk menggabungkan Node 2 dan 3 ke Node 1.
+
+### Tahap 4: Implementasi Client (Python)
+*   **Publisher (`buffered_publisher_ha.py`)**:
+    *   Logic: Coba connect Node 1 -> Gagal -> Coba Node 2 -> Gagal -> Coba Node 3.
+    *   Buffer: Jika semua gagal, simpan ke SQLite `message_buffer.db`.
+*   **Subscriber (`subscriber_ha.py`)**:
+    *   Logic: Connect ke salah satu node yang aktif untuk menerima pesan.
+
+## 4. Skenario Pengujian (Testing)
+1.  **Normal**: Start semua node, kirim pesan ke Port 1883 (Node 1), terima di Port 1885 (Node 3).
+2.  **Failover**: Matikan Node 1. Client publisher harus otomatis pindah ke Node 2 tanpa crash.
+3.  **Disaster Recovery**: Matikan semua node. Client publisher simpan data di disk. Nyalakan Node 1, data terkirim otomatis.
+
+## 5. Keunggulan Plan Ini
+*   **Tanpa Tool Tambahan**: Tidak perlu HAProxy/Keepalived yang bermasalah di Windows.
+*   **Native Reliability**: Mengandalkan fitur bawaan RabbitMQ yang sangat stabil.
+*   **Zero Data Loss**: Buffer di sisi client menjamin data aman meski server down total.
